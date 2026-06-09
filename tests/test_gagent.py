@@ -12,6 +12,7 @@ from gagent import (  # noqa: E402
     control,
     build_frame,
     decode_maxspect_status_payload,
+    decode_other_block,
     decode_schedule,
     decode_varint,
     encode_varint,
@@ -106,3 +107,25 @@ def test_decode_full_status_payload_includes_lighting_phase():
     frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
     decoded = decode_maxspect_status_payload(frame.payload)
     assert decoded["lighting_phase"] == "auto_daylight"
+
+
+def test_decode_other_block_extracts_probable_lunar_extension_fields():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    other = decode_other_block(bytes.fromhex(decoded["other"]))
+    assert other == {
+        "extension_length": 25,
+        "extension_type": 0,
+        "lunar_profile": 2,
+        "lunar_high_channels": [100, 100, 100],
+        "lunar_low_channels": [30, 30, 30],
+        "lunar_enabled": True,
+        "lunar_cycle_day": 12,
+    }
+
+
+def test_decode_full_status_payload_includes_probable_lunar_cycle_day():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    assert decoded["lunar_cycle_day"] == 12
+    assert decoded["lunar_enabled"] is True

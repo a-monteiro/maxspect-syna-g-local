@@ -44,6 +44,10 @@ def _channels_summary(d: Any) -> str | None:
 SENSORS: list[SensorDescription] = [
     SensorDescription("mode", "mode", _decoded("MODE"), icon="mdi:tune"),
     SensorDescription("lighting phase", "lighting_phase", _decoded("lighting_phase"), icon="mdi:weather-night"),
+    SensorDescription("lunar cycle day", "lunar_cycle_day", _decoded("lunar_cycle_day"), icon="mdi:moon-waning-crescent"),
+    SensorDescription("lunar enabled", "lunar_enabled", _decoded("lunar_enabled"), icon="mdi:moon-full"),
+    SensorDescription("lunar high channels", "lunar_high_channels", lambda d: ", ".join(str(v) for v in ((d.decoded_data or {}).get("lunar_high_channels") or [])) or None, icon="mdi:brightness-7"),
+    SensorDescription("lunar low channels", "lunar_low_channels", lambda d: ", ".join(str(v) for v in ((d.decoded_data or {}).get("lunar_low_channels") or [])) or None, icon="mdi:brightness-2"),
     SensorDescription("channels", "channels", _channels_summary, icon="mdi:lightbulb-multiple"),
     SensorDescription("schedule", "schedule", _decoded("schedule_summary"), icon="mdi:calendar-clock"),
     SensorDescription("device time", "device_time", _decoded("device_time"), icon="mdi:clock-outline"),

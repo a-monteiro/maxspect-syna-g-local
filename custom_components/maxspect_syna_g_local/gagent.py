@@ -230,6 +230,34 @@ def infer_lighting_phase(decoded_data: dict[str, Any]) -> str | None:
     return "auto_daylight" if _channels_any_on(current) else "auto_lunar"
 
 
+def decode_other_block(other: bytes) -> dict[str, Any]:
+    """Decode the known prefix of the Maxspect `other` extension block.
+
+    The public schema only describes this as "extension between app and
+    firmware". Live captures show a 25-byte prefix whose final byte increments
+    day-to-day and matches the app-visible lunar-cycle suspicion. Field names are
+    deliberately conservative until APK/UI capture confirms the labels.
+    """
+
+    if not other:
+        return {}
+    length = other[0]
+    decoded: dict[str, Any] = {"extension_length": length}
+    if len(other) < 26 or length < 25:
+        return decoded
+    decoded.update(
+        {
+            "extension_type": other[1],
+            "lunar_profile": other[2],
+            "lunar_high_channels": list(other[3:6]),
+            "lunar_low_channels": list(other[6:9]),
+            "lunar_enabled": bool(other[10]),
+            "lunar_cycle_day": other[25],
+        }
+    )
+    return decoded
+
+
 def decode_schedule(auto: bytes) -> list[dict[str, int | str]]:
     """Decode the 255-byte auto/schedule block into time/channel points.
 
@@ -312,6 +340,7 @@ def decode_maxspect_status_payload(payload: bytes) -> dict[str, Any] | None:
     password = data[serial_offset + 12 : serial_offset + 29]
 
     schedule_points = decode_schedule(auto)
+    other_decoded = decode_other_block(other)
     values.update(
         {
             "auto": auto.hex(),
@@ -325,6 +354,11 @@ def decode_maxspect_status_payload(payload: bytes) -> dict[str, Any] | None:
             "time_hex": time_value.hex(),
             "device_time": _decode_device_time(time_value),
             "other": other.hex(),
+            "other_decoded": other_decoded,
+            "lunar_cycle_day": other_decoded.get("lunar_cycle_day"),
+            "lunar_enabled": other_decoded.get("lunar_enabled"),
+            "lunar_high_channels": other_decoded.get("lunar_high_channels"),
+            "lunar_low_channels": other_decoded.get("lunar_low_channels"),
             "serial_number": serial.rstrip(b"\x00").decode("ascii", errors="ignore"),
             "password_configured": any(password),
         }

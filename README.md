@@ -15,6 +15,7 @@ Status: **experimental**. Read/status is well covered; light control is intentio
   - online/connectivity
   - mode
   - lighting phase (`auto_daylight`, `auto_lunar`, `manual_on`, `manual_off`)
+  - probable lunar extension fields from the `other` block (`lunar_cycle_day`, enabled flag, high/low channel presets)
   - channel 1-6 percentages
   - schedule summary and schedule points as attributes
   - device time
@@ -48,6 +49,17 @@ MODE=1 / resume auto: 000000041100000401
 ```
 
 The controller appears to run lunar/night output internally after the configured schedule reaches the 20:00 all-zero point. The integration therefore exposes an inferred `lighting_phase` sensor using mode, device clock, and decoded schedule, because raw channel datapoints can still show the last daytime channel set during lunar output.
+
+The `other` extension block also has a stable 25-byte prefix that looks lunar-related. In live captures the final byte advanced from `12` on 2026-06-08 to `13` on 2026-06-09, and both controllers now report:
+
+```text
+lunar_enabled: true
+lunar_cycle_day: 13
+lunar_high_channels: 100,100,100
+lunar_low_channels: 30,30,30
+```
+
+These names are intentionally marked probable until confirmed against APK/UI labels or additional captures.
 
 ## HACS note
 
