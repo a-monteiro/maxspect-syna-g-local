@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "custom_components" / "maxspect_syna_g_local"))
 from gagent import (  # noqa: E402
     CMD_P0,
     Frame,
+    build_control_payload,
     build_frame,
     decode_maxspect_status_payload,
     decode_schedule,
@@ -65,3 +66,21 @@ def test_decode_schedule_points_from_auto_block():
         {"time": "19:00", "channel_1": 50, "channel_2": 50, "channel_3": 50, "channel_4": 0, "channel_5": 3, "channel_6": 0},
         {"time": "20:00", "channel_1": 0, "channel_2": 0, "channel_3": 0, "channel_4": 0, "channel_5": 0, "channel_6": 0},
     ]
+
+
+def test_build_control_payload_uses_full_attribute_lsb_bitmap_and_compact_values():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    assert build_control_payload(decoded, {"MODE": 1}, serial=4).hex() == "000000041100000401"
+    assert build_control_payload(
+        decoded,
+        {"channel_1": 0, "channel_2": 0, "channel_3": 0, "channel_4": 0, "channel_5": 0, "channel_6": 0},
+        serial=4,
+    ).hex() == "00000004110001f8000000000000"
+
+
+def test_build_control_payload_orders_values_by_schema_not_input_order():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    payload = build_control_payload(decoded, {"channel_6": 6, "MODE": 1, "channel_1": 10}, serial=4)
+    assert payload.hex() == "000000041100010c010a06"

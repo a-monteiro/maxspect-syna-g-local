@@ -22,6 +22,7 @@ CMD_P0_REPLY = 0x0094
 
 P0_READ_STATUS = 0x12
 P0_READ_STATUS_ACK = 0x13
+P0_CONTROL = 0x11
 
 # APK-derived getDeviceStatus payload for a 17-attribute schema:
 # SN(4-byte BE) + P0 read cmd 0x12 + 3-byte attribute bitmap.
@@ -151,6 +152,33 @@ def status_request_payload(serial: int = 3) -> bytes:
 
     return serial.to_bytes(4, "big") + bytes([P0_READ_STATUS]) + STATUS_BITMAP
 
+
+def _control_flags(names: list[str]) -> bytes:
+    value = 0
+    for name in names:
+        value |= 1 << ATTRIBUTE_NAMES.index(name)
+    return value.to_bytes(len(STATUS_BITMAP), "big")
+
+
+def build_control_payload(_decoded_data: dict[str, Any], updates: dict[str, int], serial: int = 4) -> bytes:
+    """Build Maxspect/Gizwits var_len control payload.
+
+    The product uses Gizwits `protocolType: var_len`. Control uses a bitmap over
+    the full product attribute list, LSB-ordered by attribute id, followed by the
+    updated values in attribute order. It is compact, not a full attr_vals block.
+    """
+
+    unsupported = [name for name in updates if name not in {"MODE", *CHANNEL_NAMES, "special_mode", "identification"}]
+    if unsupported:
+        raise ValueError(f"unsupported control attributes: {', '.join(unsupported)}")
+    ordered = [name for name in ATTRIBUTE_NAMES if name in updates]
+    values = bytearray()
+    for name in ordered:
+        value = int(updates[name])
+        if not 0 <= value <= 255:
+            raise ValueError(f"{name} must fit in one byte")
+        values.append(value)
+    return serial.to_bytes(4, "big") + bytes([P0_CONTROL]) + _control_flags(ordered) + bytes(values)
 
 
 def decode_schedule(auto: bytes) -> list[dict[str, int | str]]:
