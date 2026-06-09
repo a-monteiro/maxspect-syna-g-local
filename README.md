@@ -1,8 +1,8 @@
 # Maxspect Syna-G Local
 
-Read-only Home Assistant custom integration for Maxspect Syna-G / Jump aquarium lights that speak the local Gizwits/GAgent protocol on TCP `12416`.
+Local Home Assistant custom integration for Maxspect Syna-G / Jump aquarium lights that speak the local Gizwits/GAgent protocol on TCP `12416`.
 
-Status: **experimental / read-only**.
+Status: **experimental**. Read/status is well covered; light control is intentionally limited to guarded on/off-style actions.
 
 ## What it does now
 
@@ -14,12 +14,17 @@ Status: **experimental / read-only**.
 - Decodes and exposes:
   - online/connectivity
   - mode
+  - lighting phase (`auto_daylight`, `auto_lunar`, `manual_on`, `manual_off`)
   - channel 1-6 percentages
   - schedule summary and schedule points as attributes
   - device time
   - serial number
   - identification and temperature-alert flags
   - password configured flag only; raw password bytes are never exposed
+- Exposes one guarded `light` entity per controller:
+  - turn on resumes the stored automatic/lunar schedule (`MODE=1`)
+  - turn off writes all six manual channel outputs to zero
+  - every write requires an ACK and then refreshes status from the device
 - Optional/disabled diagnostic sensors expose raw collected blocks for research:
   - payload preview
   - device time hex
@@ -28,7 +33,21 @@ Status: **experimental / read-only**.
   - quick-display raw
   - other raw
 
-It intentionally does **not** expose write/control entities yet. Basic on/off is under investigation, but the local write payload must be validated safely before it is enabled in Home Assistant.
+## Control notes
+
+The local control payload is Maxspect/Gizwits `var_len`:
+
+```text
+0093 payload = SN(4) + 0x11 + full-schema LSB bitmap(3) + compact values in schema order
+```
+
+Live-verified examples:
+
+```text
+MODE=1 / resume auto: 000000041100000401
+```
+
+The controller appears to run lunar/night output internally after the configured schedule reaches the 20:00 all-zero point. The integration therefore exposes an inferred `lighting_phase` sensor using mode, device clock, and decoded schedule, because raw channel datapoints can still show the last daytime channel set during lunar output.
 
 ## HACS note
 
