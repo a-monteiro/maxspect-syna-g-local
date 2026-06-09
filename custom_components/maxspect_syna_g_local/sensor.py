@@ -43,6 +43,7 @@ def _channels_summary(d: Any) -> str | None:
 
 SENSORS: list[SensorDescription] = [
     SensorDescription("mode", "mode", _decoded("MODE"), icon="mdi:tune"),
+    SensorDescription("lighting phase", "lighting_phase", _decoded("lighting_phase"), icon="mdi:weather-night"),
     SensorDescription("channels", "channels", _channels_summary, icon="mdi:lightbulb-multiple"),
     SensorDescription("schedule", "schedule", _decoded("schedule_summary"), icon="mdi:calendar-clock"),
     SensorDescription("device time", "device_time", _decoded("device_time"), icon="mdi:clock-outline"),

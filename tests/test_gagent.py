@@ -9,11 +9,14 @@ from gagent import (  # noqa: E402
     CMD_P0,
     Frame,
     build_control_payload,
+    control,
     build_frame,
     decode_maxspect_status_payload,
     decode_schedule,
     decode_varint,
     encode_varint,
+    infer_lighting_phase,
+    probe,
     read_frame,
     status_request_payload,
 )
@@ -84,3 +87,22 @@ def test_build_control_payload_orders_values_by_schema_not_input_order():
     decoded = decode_maxspect_status_payload(frame.payload)
     payload = build_control_payload(decoded, {"channel_6": 6, "MODE": 1, "channel_1": 10}, serial=4)
     assert payload.hex() == "000000041100010c010a06"
+
+
+def test_infer_lighting_phase_reports_auto_daylight_for_noon_fixture():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    assert infer_lighting_phase(decoded) == "auto_daylight"
+
+
+def test_infer_lighting_phase_reports_lunar_after_last_zero_schedule_point():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    decoded = {**decoded, "device_time": "2026-06-09 22:00:00"}
+    assert infer_lighting_phase(decoded) == "auto_lunar"
+
+
+def test_decode_full_status_payload_includes_lighting_phase():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    assert decoded["lighting_phase"] == "auto_daylight"

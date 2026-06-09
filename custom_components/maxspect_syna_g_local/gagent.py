@@ -181,6 +181,55 @@ def build_control_payload(_decoded_data: dict[str, Any], updates: dict[str, int]
     return serial.to_bytes(4, "big") + bytes([P0_CONTROL]) + _control_flags(ordered) + bytes(values)
 
 
+def _channels_any_on(point: dict[str, Any]) -> bool:
+    return any(int(point.get(f"channel_{idx}") or 0) > 0 for idx in range(1, 7))
+
+
+def _minutes_from_hhmm(value: str) -> int | None:
+    try:
+        hour, minute = value.split(":", 1)
+        return int(hour) * 60 + int(minute)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def infer_lighting_phase(decoded_data: dict[str, Any]) -> str | None:
+    """Infer the user-visible lighting phase from mode, clock, and schedule.
+
+    The Maxspect controller appears to handle lunar/night output internally in
+    auto mode after the programmed schedule reaches an all-zero point. The raw
+    channel datapoints can still show the last daytime channel set, so classify
+    the phase from the schedule window instead of channels alone.
+    """
+
+    mode = decoded_data.get("MODE")
+    if mode is None:
+        return None
+    channels_on = any(int(decoded_data.get(f"channel_{idx}") or 0) > 0 for idx in range(1, 7))
+    if int(mode) != 1:
+        return "manual_on" if channels_on else "manual_off"
+
+    points = decoded_data.get("schedule_points") or []
+    device_time = decoded_data.get("device_time")
+    if not points or not device_time:
+        return "auto"
+    now = _minutes_from_hhmm(device_time[11:16])
+    if now is None:
+        return "auto"
+    timed_points = [(_minutes_from_hhmm(point.get("time")), point) for point in points]
+    timed_points = [(minute, point) for minute, point in timed_points if minute is not None]
+    if not timed_points:
+        return "auto"
+    timed_points.sort(key=lambda item: item[0])
+    current = timed_points[-1][1]
+    for minute, point in timed_points:
+        if minute <= now:
+            current = point
+        else:
+            break
+    return "auto_daylight" if _channels_any_on(current) else "auto_lunar"
+
+
 def decode_schedule(auto: bytes) -> list[dict[str, int | str]]:
     """Decode the 255-byte auto/schedule block into time/channel points.
 
@@ -280,6 +329,7 @@ def decode_maxspect_status_payload(payload: bytes) -> dict[str, Any] | None:
             "password_configured": any(password),
         }
     )
+    values["lighting_phase"] = infer_lighting_phase(values)
     return values
 
 
@@ -289,6 +339,14 @@ def _read_status_after_handshake(stream: BinaryIO, serial: int = 3) -> Frame:
     if status.command != CMD_P0_REPLY:
         raise GAgentError(f"expected 0094, got {status.command:04x}")
     return status
+
+
+def _expect_control_ack(stream: BinaryIO, serial: int) -> None:
+    ack = read_frame(stream)
+    if ack.command != CMD_P0_REPLY:
+        raise GAgentError(f"expected 0094 ACK, got {ack.command:04x}")
+    if ack.payload != serial.to_bytes(4, "big"):
+        raise GAgentError(f"unexpected control ACK payload {ack.payload.hex()}")
 
 
 def _open_authenticated_stream(host: str, port: int, timeout: float) -> tuple[socket.socket, Any]:
@@ -308,6 +366,21 @@ def _open_authenticated_stream(host: str, port: int, timeout: float) -> tuple[so
         sock.close()
         raise GAgentError(f"expected 0009, got {auth.command:04x}")
     return sock, stream
+
+
+def control(host: str, updates: dict[str, int], port: int = 12416, timeout: float = 5.0, serial: int = 4) -> ProbeResult:
+    """Send a local control update and return a fresh readback probe result."""
+
+    current = probe(host, port, timeout)
+    if not current.online:
+        raise GAgentError(current.error or "device is offline")
+    payload = build_control_payload(current.decoded_data, updates, serial=serial)
+    sock, stream = _open_authenticated_stream(host, port, timeout)
+    with sock:
+        stream.write(build_frame(CMD_P0, payload))
+        _expect_control_ack(stream, serial)
+    # ACK only means accepted; success is determined by a fresh readback.
+    return probe(host, port, timeout)
 
 
 def probe(host: str, port: int = 12416, timeout: float = 5.0) -> ProbeResult:

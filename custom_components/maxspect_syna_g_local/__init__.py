@@ -11,10 +11,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import CONF_DEVICES, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN
-from .gagent import probe
+from .gagent import control, probe
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["binary_sensor", "sensor"]
+PLATFORMS = ["binary_sensor", "light", "sensor"]
 
 
 class MaxspectCoordinator(DataUpdateCoordinator):
@@ -33,6 +33,17 @@ class MaxspectCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         return await self.hass.async_add_executor_job(probe, self.host, self.port)
+
+    async def async_resume_auto(self) -> None:
+        """Resume the device's stored automatic/lunar schedule."""
+
+        self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, {"MODE": 1}, self.port))
+
+    async def async_turn_channels_off(self) -> None:
+        """Set all manual channel outputs to zero."""
+
+        updates = {f"channel_{idx}": 0 for idx in range(1, 7)}
+        self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, updates, self.port))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
