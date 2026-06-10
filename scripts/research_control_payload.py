@@ -12,7 +12,9 @@ from gagent import build_control_payload, probe  # noqa: E402
 
 
 def main() -> None:
-    host = sys.argv[1] if len(sys.argv) > 1 else "192.168.2.86"
+    if len(sys.argv) < 2:
+        raise SystemExit("usage: research_control_payload.py <host>")
+    host = sys.argv[1]
     result = probe(host)
     decoded = result.decoded_data or {}
     resume_auto = build_control_payload(decoded, {"MODE": 1}, serial=4)
