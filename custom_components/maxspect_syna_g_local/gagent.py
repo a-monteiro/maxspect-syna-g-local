@@ -47,6 +47,44 @@ ATTRIBUTE_NAMES = [
 ]
 STATUS_BITMAP = b"\xff" * ceil(len(ATTRIBUTE_NAMES) / 8)
 CHANNEL_NAMES = [f"channel_{idx}" for idx in range(1, 7)]
+CHANNEL_LABELS = {
+    "channel_1": "Purplish Blue",
+    "channel_2": "Pool Blue",
+    "channel_3": "Royal Blue + Cool White",
+    "channel_4": "Green",
+    "channel_5": "Warm White",
+    "channel_6": "Red",
+}
+CHANNEL_LABELS_SHORT = {
+    "channel_1": "PB",
+    "channel_2": "Blue",
+    "channel_3": "RB+CW",
+    "channel_4": "Green",
+    "channel_5": "Warm White",
+    "channel_6": "Red",
+}
+
+
+def labeled_channels(decoded_data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Return APK-derived channel labels paired with decoded brightness values."""
+
+    return {
+        name: {
+            "label": CHANNEL_LABELS[name],
+            "short_label": CHANNEL_LABELS_SHORT[name],
+            "value": decoded_data.get(name),
+        }
+        for name in CHANNEL_NAMES
+    }
+
+
+def labeled_channels_summary(decoded_data: dict[str, Any], *, short: bool = True) -> str | None:
+    """Format channel brightness values with APK-derived labels."""
+
+    if any(decoded_data.get(name) is None for name in CHANNEL_NAMES):
+        return None
+    labels = CHANNEL_LABELS_SHORT if short else CHANNEL_LABELS
+    return ", ".join(f"{labels[name]}={decoded_data[name]}" for name in CHANNEL_NAMES)
 
 
 class GAgentError(RuntimeError):
@@ -363,6 +401,8 @@ def decode_maxspect_status_payload(payload: bytes) -> dict[str, Any] | None:
             "password_configured": any(password),
         }
     )
+    values["channel_labels"] = labeled_channels(values)
+    values["channels_labeled_summary"] = labeled_channels_summary(values)
     values["lighting_phase"] = infer_lighting_phase(values)
     return values
 

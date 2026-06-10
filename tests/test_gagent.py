@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "custom_components" / "maxspect_syna_g_local"))
 
 from gagent import (  # noqa: E402
+    CHANNEL_LABELS,
     CMD_P0,
     Frame,
     build_control_payload,
@@ -17,6 +18,7 @@ from gagent import (  # noqa: E402
     decode_varint,
     encode_varint,
     infer_lighting_phase,
+    labeled_channels_summary,
     probe,
     read_frame,
     status_request_payload,
@@ -129,3 +131,26 @@ def test_decode_full_status_payload_includes_probable_lunar_cycle_day():
     decoded = decode_maxspect_status_payload(frame.payload)
     assert decoded["lunar_cycle_day"] == 12
     assert decoded["lunar_enabled"] is True
+
+
+def test_apk_derived_channel_labels_are_exposed():
+    assert CHANNEL_LABELS == {
+        "channel_1": "Purplish Blue",
+        "channel_2": "Pool Blue",
+        "channel_3": "Royal Blue + Cool White",
+        "channel_4": "Green",
+        "channel_5": "Warm White",
+        "channel_6": "Red",
+    }
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    assert decoded["channel_labels"]["channel_3"] == {
+        "label": "Royal Blue + Cool White",
+        "short_label": "RB+CW",
+        "value": 65,
+    }
+    assert decoded["channels_labeled_summary"] == "PB=65, Blue=65, RB+CW=65, Green=0, Warm White=5, Red=0"
+    assert labeled_channels_summary(decoded, short=False) == (
+        "Purplish Blue=65, Pool Blue=65, Royal Blue + Cool White=65, "
+        "Green=0, Warm White=5, Red=0"
+    )

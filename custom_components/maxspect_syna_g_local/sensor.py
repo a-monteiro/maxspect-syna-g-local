@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import MaxspectCoordinator
 from .const import DOMAIN
+from .gagent import CHANNEL_LABELS, CHANNEL_LABELS_SHORT, CHANNEL_NAMES
 
 
 @dataclass(frozen=True)
@@ -35,10 +36,10 @@ def _decoded(key: str, default: Any = None) -> Callable[[Any], Any]:
 
 def _channels_summary(d: Any) -> str | None:
     decoded = d.decoded_data or {}
-    channels = [decoded.get(f"channel_{idx}") for idx in range(1, 7)]
+    channels = [decoded.get(name) for name in CHANNEL_NAMES]
     if any(value is None for value in channels):
         return None
-    return ", ".join(str(value) for value in channels)
+    return ", ".join(f"{CHANNEL_LABELS_SHORT[name]}={decoded[name]}" for name in CHANNEL_NAMES)
 
 
 SENSORS: list[SensorDescription] = [
@@ -54,7 +55,7 @@ SENSORS: list[SensorDescription] = [
     SensorDescription("serial number", "serial_number", _decoded("serial_number"), icon="mdi:identifier", entity_category=EntityCategory.DIAGNOSTIC),
     *[
         SensorDescription(
-            f"channel {idx}",
+            f"{CHANNEL_LABELS[f'channel_{idx}']} channel",
             f"channel_{idx}",
             _decoded(f"channel_{idx}"),
             icon="mdi:brightness-percent",

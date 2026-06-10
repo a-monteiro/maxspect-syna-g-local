@@ -51,6 +51,8 @@ class MaxspectSynaGLight(CoordinatorEntity[MaxspectCoordinator], LightEntity):
             "mode": decoded.get("MODE"),
             "lighting_phase": decoded.get("lighting_phase"),
             "channels": {f"channel_{idx}": decoded.get(f"channel_{idx}") for idx in range(1, 7)},
+            "channel_labels": decoded.get("channel_labels"),
+            "channels_labeled_summary": decoded.get("channels_labeled_summary"),
             "schedule_summary": decoded.get("schedule_summary"),
         }
 
