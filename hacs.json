@@ -2,6 +2,6 @@
   "name": "Maxspect Syna-G Local",
   "content_in_root": false,
   "render_readme": true,
-  "domains": ["sensor", "binary_sensor"],
+  "domains": ["binary_sensor", "button", "light", "number", "sensor", "switch"],
   "homeassistant": "2024.6.0"
 }
