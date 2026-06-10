@@ -9,9 +9,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_DEVICES, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN
-from .gagent import control, probe
+from .gagent import control, encode_device_time, probe
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["binary_sensor", "button", "light", "sensor"]
@@ -44,6 +45,14 @@ class MaxspectCoordinator(DataUpdateCoordinator):
 
         updates = {f"channel_{idx}": 0 for idx in range(1, 7)}
         self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, updates, self.port))
+
+    async def async_sync_device_time(self) -> None:
+        """Sync the controller clock to Home Assistant's local time."""
+
+        now = dt_util.now().replace(microsecond=0)
+        self.async_set_updated_data(
+            await self.hass.async_add_executor_job(control, self.host, {"time": encode_device_time(now)}, self.port)
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -7,6 +7,7 @@ and used by the standalone probe script.
 from __future__ import annotations
 
 import dataclasses
+from datetime import datetime
 import socket
 import time
 from math import ceil
@@ -198,7 +199,15 @@ def _control_flags(names: list[str]) -> bytes:
     return value.to_bytes(len(STATUS_BITMAP), "big")
 
 
-def build_control_payload(_decoded_data: dict[str, Any], updates: dict[str, int], serial: int = 4) -> bytes:
+def encode_device_time(value: datetime) -> bytes:
+    """Encode a local device time as the Maxspect 6-byte time attribute."""
+
+    if not 2000 <= value.year <= 2099:
+        raise ValueError("device time year must be between 2000 and 2099")
+    return bytes([value.year - 2000, value.month, value.day, value.hour, value.minute, value.second])
+
+
+def build_control_payload(_decoded_data: dict[str, Any], updates: dict[str, int | bytes], serial: int = 4) -> bytes:
     """Build Maxspect/Gizwits var_len control payload.
 
     The product uses Gizwits `protocolType: var_len`. Control uses a bitmap over
@@ -206,12 +215,18 @@ def build_control_payload(_decoded_data: dict[str, Any], updates: dict[str, int]
     updated values in attribute order. It is compact, not a full attr_vals block.
     """
 
-    unsupported = [name for name in updates if name not in {"MODE", *CHANNEL_NAMES, "special_mode", "identification"}]
+    unsupported = [name for name in updates if name not in {"MODE", *CHANNEL_NAMES, "special_mode", "identification", "time"}]
     if unsupported:
         raise ValueError(f"unsupported control attributes: {', '.join(unsupported)}")
     ordered = [name for name in ATTRIBUTE_NAMES if name in updates]
     values = bytearray()
     for name in ordered:
+        if name == "time":
+            value = bytes(updates[name])
+            if len(value) != 6:
+                raise ValueError("time must be exactly 6 bytes")
+            values.extend(value)
+            continue
         value = int(updates[name])
         if not 0 <= value <= 255:
             raise ValueError(f"{name} must fit in one byte")
@@ -442,7 +457,7 @@ def _open_authenticated_stream(host: str, port: int, timeout: float) -> tuple[so
     return sock, stream
 
 
-def control(host: str, updates: dict[str, int], port: int = 12416, timeout: float = 5.0, serial: int = 4) -> ProbeResult:
+def control(host: str, updates: dict[str, int | bytes], port: int = 12416, timeout: float = 5.0, serial: int = 4) -> ProbeResult:
     """Send a local control update and return a fresh readback probe result."""
 
     current = probe(host, port, timeout)

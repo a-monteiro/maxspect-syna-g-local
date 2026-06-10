@@ -29,6 +29,7 @@ Status: **experimental**. Read/status is well covered; writes are intentionally 
 - Exposes explicit action buttons per controller:
   - resume automatic schedule
   - manual all channels off, which writes all six manual channel outputs to zero
+  - sync device time to Home Assistant's local clock
 - Optional/disabled diagnostic sensors expose raw collected blocks for research:
   - payload preview
   - device time hex

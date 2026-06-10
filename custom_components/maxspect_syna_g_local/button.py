@@ -41,6 +41,12 @@ BUTTONS: tuple[ButtonDescription, ...] = (
         icon="mdi:lightbulb-off-outline",
         press=lambda coordinator: coordinator.async_turn_channels_off(),
     ),
+    ButtonDescription(
+        label="sync device time",
+        key="sync_device_time",
+        icon="mdi:clock-check-outline",
+        press=lambda coordinator: coordinator.async_sync_device_time(),
+    ),
 )
 
 

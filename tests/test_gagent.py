@@ -1,3 +1,4 @@
+from datetime import datetime
 from io import BytesIO
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ from gagent import (  # noqa: E402
     decode_other_block,
     decode_schedule,
     decode_varint,
+    encode_device_time,
     encode_varint,
     infer_lighting_phase,
     labeled_channels_summary,
@@ -90,6 +92,14 @@ def test_build_control_payload_orders_values_by_schema_not_input_order():
     decoded = decode_maxspect_status_payload(frame.payload)
     payload = build_control_payload(decoded, {"channel_6": 6, "MODE": 1, "channel_1": 10}, serial=4)
     assert payload.hex() == "000000041100010c010a06"
+
+
+def test_encode_device_time_and_build_time_control_payload():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    device_time = encode_device_time(datetime(2026, 6, 10, 15, 42, 7))
+    assert device_time.hex() == "1a060a0f2a07"
+    assert build_control_payload(decoded, {"time": device_time}, serial=5).hex() == "00000005110020001a060a0f2a07"
 
 
 def test_infer_lighting_phase_reports_auto_daylight_for_noon_fixture():
