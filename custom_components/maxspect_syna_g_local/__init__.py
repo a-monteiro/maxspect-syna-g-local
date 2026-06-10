@@ -5,21 +5,27 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 import logging
+from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_DEVICES, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN
-from .gagent import CHANNEL_NAMES, control, encode_device_time, manual_channel_updates, probe
+from .gagent import CHANNEL_NAMES, control, encode_device_time, manual_channel_updates, probe, schedule_auto_update
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["binary_sensor", "button", "light", "number", "sensor"]
+SCHEDULE_BACKUPS_STORAGE_KEY = f"{DOMAIN}_schedule_backups"
 SERVICE_APPLY_MANUAL_PRESET = "apply_manual_preset"
+SERVICE_BACKUP_SCHEDULE = "backup_schedule"
+SERVICE_RESTORE_SCHEDULE = "restore_schedule"
+DEVICE_OPTIONAL_SCHEMA = vol.Schema({vol.Optional("device"): str})
 SERVICE_APPLY_MANUAL_PRESET_SCHEMA = vol.Schema(
     {
         vol.Optional("device"): str,
@@ -34,7 +40,14 @@ SERVICE_APPLY_MANUAL_PRESET_SCHEMA = vol.Schema(
 class MaxspectCoordinator(DataUpdateCoordinator):
     """Coordinator for one Maxspect local device."""
 
-    def __init__(self, hass: HomeAssistant, name: str, host: str, port: int = DEFAULT_PORT) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        name: str,
+        host: str,
+        port: int = DEFAULT_PORT,
+        schedule_store: Store | None = None,
+    ) -> None:
         super().__init__(
             hass,
             _LOGGER,
@@ -44,6 +57,7 @@ class MaxspectCoordinator(DataUpdateCoordinator):
         self.device_name = name
         self.host = host
         self.port = port
+        self.schedule_store = schedule_store or Store(hass, 1, SCHEDULE_BACKUPS_STORAGE_KEY)
 
     async def _async_update_data(self):
         return await self.hass.async_add_executor_job(probe, self.host, self.port)
@@ -75,6 +89,45 @@ class MaxspectCoordinator(DataUpdateCoordinator):
             await self.hass.async_add_executor_job(control, self.host, manual_channel_updates(values), self.port)
         )
 
+    async def async_backup_schedule(self) -> dict[str, Any]:
+        """Persist the current raw auto/schedule block for this device."""
+
+        if self.data is None or not self.data.decoded_data.get("auto"):
+            await self.async_request_refresh()
+        if self.data is None:
+            raise ValueError("device status is unavailable")
+        decoded = self.data.decoded_data or {}
+        auto_hex = decoded.get("auto")
+        if not auto_hex:
+            raise ValueError("device status does not contain an auto schedule block")
+        raw_auto = bytes.fromhex(auto_hex)
+        schedule_auto_update(raw_auto)
+        backup = {
+            "host": self.host,
+            "device_name": self.device_name,
+            "serial_number": decoded.get("serial_number"),
+            "backed_up_at": dt_util.utcnow().isoformat(),
+            "auto": auto_hex,
+            "points": decoded.get("schedule_points") or [],
+            "summary": decoded.get("schedule_summary"),
+        }
+        backups = await self.schedule_store.async_load() or {}
+        backups[self.host] = backup
+        await self.schedule_store.async_save(backups)
+        return backup
+
+    async def async_restore_schedule(self) -> None:
+        """Restore the last persisted raw auto/schedule block for this device."""
+
+        backups = await self.schedule_store.async_load() or {}
+        backup = backups.get(self.host)
+        if not backup or not backup.get("auto"):
+            raise ValueError(f"no schedule backup stored for {self.device_name}")
+        raw_auto = bytes.fromhex(backup["auto"])
+        self.async_set_updated_data(
+            await self.hass.async_add_executor_job(control, self.host, schedule_auto_update(raw_auto), self.port)
+        )
+
     async def async_sync_device_time(self) -> None:
         """Sync the controller clock to Home Assistant's local time."""
 
@@ -90,11 +143,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     devices = entry.data.get(CONF_DEVICES) or [entry.data]
     coordinators: list[MaxspectCoordinator] = []
 
+    schedule_store = Store(hass, 1, SCHEDULE_BACKUPS_STORAGE_KEY)
+
     for idx, device in enumerate(devices, start=1):
         host = device[CONF_HOST]
         name = device.get(CONF_NAME) or f"Maxspect Syna-G {idx}"
         port = int(device.get("port", DEFAULT_PORT))
-        coordinator = MaxspectCoordinator(hass, name, host, port)
+        coordinator = MaxspectCoordinator(hass, name, host, port, schedule_store)
         await coordinator.async_config_entry_first_refresh()
         coordinators.append(coordinator)
 
@@ -110,6 +165,19 @@ def _all_coordinators(hass: HomeAssistant) -> list[MaxspectCoordinator]:
     return [coordinator for entry_coordinators in hass.data.get(DOMAIN, {}).values() for coordinator in entry_coordinators]
 
 
+def _matching_coordinators(hass: HomeAssistant, device: str | None) -> list[MaxspectCoordinator]:
+    """Return loaded coordinators matching an optional device name or host."""
+
+    coordinators = _all_coordinators(hass)
+    if device:
+        coordinators = [
+            coordinator for coordinator in coordinators if coordinator.device_name == device or coordinator.host == device
+        ]
+    if not coordinators:
+        raise ValueError(f"no Maxspect Syna-G devices matched {device!r}")
+    return coordinators
+
+
 def _async_register_services(hass: HomeAssistant) -> None:
     """Register domain services once."""
 
@@ -119,22 +187,36 @@ def _async_register_services(hass: HomeAssistant) -> None:
     async def async_apply_manual_preset(call: ServiceCall) -> None:
         device = call.data.get("device")
         values = [call.data[channel] for channel in CHANNEL_NAMES]
-        coordinators = _all_coordinators(hass)
-        if device:
-            coordinators = [
-                coordinator
-                for coordinator in coordinators
-                if coordinator.device_name == device or coordinator.host == device
-            ]
-        if not coordinators:
-            raise ValueError(f"no Maxspect Syna-G devices matched {device!r}")
+        coordinators = _matching_coordinators(hass, device)
         await asyncio.gather(*(coordinator.async_apply_manual_preset(values) for coordinator in coordinators))
+
+    async def async_backup_schedule(call: ServiceCall) -> None:
+        device = call.data.get("device")
+        coordinators = _matching_coordinators(hass, device)
+        await asyncio.gather(*(coordinator.async_backup_schedule() for coordinator in coordinators))
+
+    async def async_restore_schedule(call: ServiceCall) -> None:
+        device = call.data.get("device")
+        coordinators = _matching_coordinators(hass, device)
+        await asyncio.gather(*(coordinator.async_restore_schedule() for coordinator in coordinators))
 
     hass.services.async_register(
         DOMAIN,
         SERVICE_APPLY_MANUAL_PRESET,
         async_apply_manual_preset,
         schema=SERVICE_APPLY_MANUAL_PRESET_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BACKUP_SCHEDULE,
+        async_backup_schedule,
+        schema=DEVICE_OPTIONAL_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RESTORE_SCHEDULE,
+        async_restore_schedule,
+        schema=DEVICE_OPTIONAL_SCHEMA,
     )
 
 

@@ -24,7 +24,7 @@ class ButtonDescription:
     label: str
     key: str
     icon: str
-    press: Callable[[MaxspectCoordinator], Coroutine[Any, Any, None]]
+    press: Callable[[MaxspectCoordinator], Coroutine[Any, Any, Any]]
     entity_category: EntityCategory | None = EntityCategory.CONFIG
 
 
@@ -46,6 +46,18 @@ BUTTONS: tuple[ButtonDescription, ...] = (
         key="sync_device_time",
         icon="mdi:clock-check-outline",
         press=lambda coordinator: coordinator.async_sync_device_time(),
+    ),
+    ButtonDescription(
+        label="backup automatic schedule",
+        key="backup_auto_schedule",
+        icon="mdi:content-save-clock-outline",
+        press=lambda coordinator: coordinator.async_backup_schedule(),
+    ),
+    ButtonDescription(
+        label="restore backed up schedule",
+        key="restore_auto_schedule",
+        icon="mdi:backup-restore",
+        press=lambda coordinator: coordinator.async_restore_schedule(),
     ),
 )
 

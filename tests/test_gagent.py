@@ -20,6 +20,7 @@ from gagent import (  # noqa: E402
     encode_device_time,
     encode_varint,
     infer_lighting_phase,
+    schedule_auto_update,
     labeled_channels_summary,
     manual_channel_updates,
     probe,
@@ -186,3 +187,22 @@ def test_apk_derived_channel_labels_are_exposed():
         "Purplish Blue=65, Pool Blue=65, Royal Blue + Cool White=65, "
         "Green=0, Warm White=5, Red=0"
     )
+
+
+def test_schedule_auto_update_accepts_255_byte_raw_auto_block():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    raw_auto = bytes.fromhex(decoded["auto"])
+    assert len(raw_auto) == 255
+    assert schedule_auto_update(raw_auto) == {"auto": raw_auto}
+    assert build_control_payload(decoded, schedule_auto_update(raw_auto), serial=6).hex().startswith("0000000611000400")
+
+
+def test_schedule_auto_update_rejects_invalid_shape():
+    for invalid in (b"", b"\x37" * 254, bytes([0x37, 32]) + b"\x00" * 253):
+        try:
+            schedule_auto_update(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("accepted invalid auto schedule block")

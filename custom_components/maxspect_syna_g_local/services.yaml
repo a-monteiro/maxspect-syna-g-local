@@ -69,3 +69,27 @@ apply_manual_preset:
           max: 100
           step: 1
           unit_of_measurement: "%"
+
+backup_schedule:
+  name: Backup automatic schedule
+  description: Persist the current raw automatic schedule block for one or all Maxspect Syna-G controllers.
+  fields:
+    device:
+      name: Device
+      description: Optional device name or host. If omitted, backs up all configured controllers.
+      required: false
+      example: aquarium-light-1
+      selector:
+        text:
+
+restore_schedule:
+  name: Restore backed up schedule
+  description: Restore the last persisted raw automatic schedule block for one or all Maxspect Syna-G controllers.
+  fields:
+    device:
+      name: Device
+      description: Optional device name or host. If omitted, restores all configured controllers with backups.
+      required: false
+      example: aquarium-light-1
+      selector:
+        text:

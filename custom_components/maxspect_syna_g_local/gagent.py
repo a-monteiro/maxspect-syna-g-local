@@ -102,6 +102,20 @@ def manual_channel_updates(values: list[int]) -> dict[str, int]:
     return updates
 
 
+def schedule_auto_update(auto: bytes) -> dict[str, bytes]:
+    """Return a validated raw 255-byte auto/schedule update mapping."""
+
+    value = bytes(auto)
+    if len(value) != 255:
+        raise ValueError("auto schedule block must be exactly 255 bytes")
+    count = value[1]
+    if count > 28:  # 2-byte header + count * 9-byte records must fit in 255 bytes.
+        raise ValueError("auto schedule block contains too many points")
+    if 2 + count * 9 > len(value):
+        raise ValueError("auto schedule point count exceeds block length")
+    return {"auto": value}
+
+
 class GAgentError(RuntimeError):
     """Protocol or connection error."""
 
@@ -229,12 +243,18 @@ def build_control_payload(_decoded_data: dict[str, Any], updates: dict[str, int 
     updated values in attribute order. It is compact, not a full attr_vals block.
     """
 
-    unsupported = [name for name in updates if name not in {"MODE", *CHANNEL_NAMES, "special_mode", "identification", "time"}]
+    unsupported = [name for name in updates if name not in {"MODE", *CHANNEL_NAMES, "special_mode", "identification", "auto", "time"}]
     if unsupported:
         raise ValueError(f"unsupported control attributes: {', '.join(unsupported)}")
     ordered = [name for name in ATTRIBUTE_NAMES if name in updates]
     values = bytearray()
     for name in ordered:
+        if name == "auto":
+            value = bytes(updates[name])
+            if len(value) != 255:
+                raise ValueError("auto must be exactly 255 bytes")
+            values.extend(value)
+            continue
         if name == "time":
             value = bytes(updates[name])
             if len(value) != 6:
