@@ -2,20 +2,33 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 import logging
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_DEVICES, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN
-from .gagent import CHANNEL_NAMES, control, encode_device_time, probe
+from .gagent import CHANNEL_NAMES, control, encode_device_time, manual_channel_updates, probe
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["binary_sensor", "button", "light", "number", "sensor"]
+SERVICE_APPLY_MANUAL_PRESET = "apply_manual_preset"
+SERVICE_APPLY_MANUAL_PRESET_SCHEMA = vol.Schema(
+    {
+        vol.Optional("device"): str,
+        **{
+            vol.Required(channel): vol.All(vol.Coerce(int), vol.Range(min=0, max=100))
+            for channel in CHANNEL_NAMES
+        },
+    }
+)
 
 
 class MaxspectCoordinator(DataUpdateCoordinator):
@@ -55,6 +68,13 @@ class MaxspectCoordinator(DataUpdateCoordinator):
             raise ValueError("channel value must be between 0 and 100")
         self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, {channel: value}, self.port))
 
+    async def async_apply_manual_preset(self, values: list[int]) -> None:
+        """Apply a six-channel manual preset."""
+
+        self.async_set_updated_data(
+            await self.hass.async_add_executor_job(control, self.host, manual_channel_updates(values), self.port)
+        )
+
     async def async_sync_device_time(self) -> None:
         """Sync the controller clock to Home Assistant's local time."""
 
@@ -79,8 +99,43 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinators.append(coordinator)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinators
+    _async_register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+def _all_coordinators(hass: HomeAssistant) -> list[MaxspectCoordinator]:
+    """Return all loaded Maxspect coordinators."""
+
+    return [coordinator for entry_coordinators in hass.data.get(DOMAIN, {}).values() for coordinator in entry_coordinators]
+
+
+def _async_register_services(hass: HomeAssistant) -> None:
+    """Register domain services once."""
+
+    if hass.services.has_service(DOMAIN, SERVICE_APPLY_MANUAL_PRESET):
+        return
+
+    async def async_apply_manual_preset(call: ServiceCall) -> None:
+        device = call.data.get("device")
+        values = [call.data[channel] for channel in CHANNEL_NAMES]
+        coordinators = _all_coordinators(hass)
+        if device:
+            coordinators = [
+                coordinator
+                for coordinator in coordinators
+                if coordinator.device_name == device or coordinator.host == device
+            ]
+        if not coordinators:
+            raise ValueError(f"no Maxspect Syna-G devices matched {device!r}")
+        await asyncio.gather(*(coordinator.async_apply_manual_preset(values) for coordinator in coordinators))
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_APPLY_MANUAL_PRESET,
+        async_apply_manual_preset,
+        schema=SERVICE_APPLY_MANUAL_PRESET_SCHEMA,
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

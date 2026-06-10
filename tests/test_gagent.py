@@ -21,6 +21,7 @@ from gagent import (  # noqa: E402
     encode_varint,
     infer_lighting_phase,
     labeled_channels_summary,
+    manual_channel_updates,
     probe,
     read_frame,
     status_request_payload,
@@ -100,6 +101,27 @@ def test_encode_device_time_and_build_time_control_payload():
     device_time = encode_device_time(datetime(2026, 6, 10, 15, 42, 7))
     assert device_time.hex() == "1a060a0f2a07"
     assert build_control_payload(decoded, {"time": device_time}, serial=5).hex() == "00000005110020001a060a0f2a07"
+
+
+def test_manual_channel_updates_maps_six_percentages_to_channel_updates():
+    assert manual_channel_updates([65, 65, 65, 0, 5, 0]) == {
+        "channel_1": 65,
+        "channel_2": 65,
+        "channel_3": 65,
+        "channel_4": 0,
+        "channel_5": 5,
+        "channel_6": 0,
+    }
+
+
+def test_manual_channel_updates_rejects_invalid_preset_shape_and_values():
+    for invalid in ([1, 2, 3], [1, 2, 3, 4, 5, 101], [1, 2, 3, 4, 5, -1]):
+        try:
+            manual_channel_updates(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"accepted invalid preset {invalid}")
 
 
 def test_infer_lighting_phase_reports_auto_daylight_for_noon_fixture():

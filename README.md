@@ -27,6 +27,7 @@ Status: **experimental**. Read/status is well covered; writes are intentionally 
   - turn off is a safe no-op/refresh; it does **not** zero outputs
   - every write requires an ACK and then refreshes status from the device
 - Exposes labelled manual channel `number` entities, 0-100%, using APK-derived channel names.
+- Exposes `maxspect_syna_g_local.apply_manual_preset` service for local feeding/maintenance/daylight presets.
 - Exposes explicit action buttons per controller:
   - resume automatic schedule
   - manual all channels off, which writes all six manual channel outputs to zero

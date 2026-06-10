@@ -88,6 +88,20 @@ def labeled_channels_summary(decoded_data: dict[str, Any], *, short: bool = True
     return ", ".join(f"{labels[name]}={decoded_data[name]}" for name in CHANNEL_NAMES)
 
 
+def manual_channel_updates(values: list[int]) -> dict[str, int]:
+    """Return channel update mapping for a six-value manual preset."""
+
+    if len(values) != len(CHANNEL_NAMES):
+        raise ValueError("manual preset must contain exactly six channel values")
+    updates: dict[str, int] = {}
+    for name, value in zip(CHANNEL_NAMES, values, strict=True):
+        level = int(value)
+        if not 0 <= level <= 100:
+            raise ValueError("manual preset channel values must be between 0 and 100")
+        updates[name] = level
+    return updates
+
+
 class GAgentError(RuntimeError):
     """Protocol or connection error."""
 

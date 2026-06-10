@@ -1,0 +1,71 @@
+apply_manual_preset:
+  name: Apply manual preset
+  description: Apply a six-channel manual brightness preset to one or all Maxspect Syna-G controllers.
+  fields:
+    device:
+      name: Device
+      description: Optional device name or host. If omitted, applies to all configured controllers.
+      required: false
+      example: aquarium-light-1
+      selector:
+        text:
+    channel_1:
+      name: Purplish Blue
+      description: Channel 1 brightness percentage.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+    channel_2:
+      name: Pool Blue
+      description: Channel 2 brightness percentage.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+    channel_3:
+      name: Royal Blue + Cool White
+      description: Channel 3 brightness percentage.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+    channel_4:
+      name: Green
+      description: Channel 4 brightness percentage.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+    channel_5:
+      name: Warm White
+      description: Channel 5 brightness percentage.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+    channel_6:
+      name: Red
+      description: Channel 6 brightness percentage.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
