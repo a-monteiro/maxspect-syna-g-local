@@ -134,3 +134,45 @@ apply_lunar_config:
           min: 0
           max: 29
           step: 1
+
+apply_spectrum_preset:
+  name: Apply spectrum preset
+  description: Apply an APK-derived R6 spectrum/CCT preset to one or all Maxspect Syna-G controllers.
+  fields:
+    device:
+      name: Device
+      description: Optional device name or host. If omitted, applies to all configured controllers.
+      required: false
+      example: aquarium-light-1
+      selector:
+        text:
+    preset:
+      name: Preset
+      description: APK-derived spectrum preset name.
+      required: true
+      example: 16K
+      selector:
+        select:
+          options:
+            - 12K
+            - 16K
+            - 20K
+            - Royal Actinic 420
+            - Sky Blue
+            - Abyss Blue
+            - Aquamarine
+            - Cyan Actinic
+            - Vanuatu Green
+            - Fiji Pink
+            - Hawaii Purple
+    intensity:
+      name: Intensity
+      description: Optional overall scaling percentage applied to the preset.
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"

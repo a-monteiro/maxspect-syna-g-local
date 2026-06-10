@@ -29,6 +29,9 @@ Status: **experimental but live-tested**. Read/status support is broad; writes a
   - lunar cycle day
   - high channel triplet
   - low channel triplet
+- APK-derived spectrum/CCT presets:
+  - 12K / 16K / 20K anchors
+  - Royal Actinic 420, Sky Blue, Abyss Blue, Aquamarine, Cyan Actinic, Vanuatu Green, Fiji Pink, Hawaii Purple
 - Automatic schedule sensors with decoded points.
 - Schedule backup/restore services and per-controller buttons.
 - Explicit action buttons:
@@ -116,6 +119,10 @@ Lunar sliders:
 
 - Lunar enabled flag.
 
+### Selects
+
+- Spectrum preset, using the APK-derived R6 preset table. Includes 12K / 16K / 20K anchors and the named app spectra.
+
 ### Sensors
 
 - Mode
@@ -199,6 +206,34 @@ data:
 
 All fields except `device` are optional; omitted fields are preserved from current device state.
 
+### `maxspect_syna_g_local.apply_spectrum_preset`
+
+Apply an APK-derived R6 spectrum/CCT preset.
+
+```yaml
+service: maxspect_syna_g_local.apply_spectrum_preset
+data:
+  device: aquarium-light-1
+  preset: 16K
+  intensity: 100
+```
+
+Supported presets:
+
+- `12K`
+- `16K`
+- `20K`
+- `Royal Actinic 420`
+- `Sky Blue`
+- `Abyss Blue`
+- `Aquamarine`
+- `Cyan Actinic`
+- `Vanuatu Green`
+- `Fiji Pink`
+- `Hawaii Purple`
+
+`intensity` scales the selected six-channel table from 0-100%. The 12K/16K/20K entries are the visible anchors from the Syna-G CCT screen; the named spectra come from the same APK R6 preset table.
+
 ## Safety model
 
 This integration intentionally avoids surprising aquarium light changes.
@@ -207,6 +242,7 @@ This integration intentionally avoids surprising aquarium light changes.
 - Potentially disruptive writes are explicit buttons or services.
 - Schedule restore writes the exact raw backed-up schedule block, not a reconstructed approximation.
 - Lunar updates modify only known lunar bytes and preserve unknown extension bytes.
+- Spectrum presets are explicit manual channel writes derived from the official APK table.
 - Every write requires a device ACK and then refreshes status.
 
 ## Protocol notes

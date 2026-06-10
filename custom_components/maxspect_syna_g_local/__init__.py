@@ -25,15 +25,17 @@ from .gagent import (
     manual_channel_updates,
     probe,
     schedule_auto_update,
+    spectrum_preset_updates,
 )
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["binary_sensor", "button", "light", "number", "sensor", "switch"]
+PLATFORMS = ["binary_sensor", "button", "light", "number", "select", "sensor", "switch"]
 SCHEDULE_BACKUPS_STORAGE_KEY = f"{DOMAIN}_schedule_backups"
 SERVICE_APPLY_MANUAL_PRESET = "apply_manual_preset"
 SERVICE_BACKUP_SCHEDULE = "backup_schedule"
 SERVICE_RESTORE_SCHEDULE = "restore_schedule"
 SERVICE_APPLY_LUNAR_CONFIG = "apply_lunar_config"
+SERVICE_APPLY_SPECTRUM_PRESET = "apply_spectrum_preset"
 DEVICE_OPTIONAL_SCHEMA = vol.Schema({vol.Optional("device"): str})
 THREE_PERCENTAGES_SCHEMA = vol.All(
     [vol.All(vol.Coerce(int), vol.Range(min=0, max=100))], vol.Length(min=3, max=3)
@@ -45,6 +47,13 @@ SERVICE_APPLY_LUNAR_CONFIG_SCHEMA = vol.Schema(
         vol.Optional("high_channels"): THREE_PERCENTAGES_SCHEMA,
         vol.Optional("low_channels"): THREE_PERCENTAGES_SCHEMA,
         vol.Optional("cycle_day"): vol.All(vol.Coerce(int), vol.Range(min=0, max=29)),
+    }
+)
+SERVICE_APPLY_SPECTRUM_PRESET_SCHEMA = vol.Schema(
+    {
+        vol.Optional("device"): str,
+        vol.Required("preset"): str,
+        vol.Optional("intensity", default=100): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
     }
 )
 SERVICE_APPLY_MANUAL_PRESET_SCHEMA = vol.Schema(
@@ -94,6 +103,18 @@ class MaxspectCoordinator(DataUpdateCoordinator):
         updates = {f"channel_{idx}": 0 for idx in range(1, 7)}
         self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, updates, self.port))
 
+    async def async_apply_manual_preset(self, values: list[int]) -> None:
+        """Apply a six-channel manual preset."""
+
+        updates = manual_channel_updates(values)
+        self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, updates, self.port))
+
+    async def async_apply_spectrum_preset(self, preset: str, *, intensity: int = 100) -> None:
+        """Apply an APK-derived six-channel spectrum preset."""
+
+        updates = spectrum_preset_updates(preset, intensity=intensity)
+        self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, updates, self.port))
+
     async def async_set_channel(self, channel: str, value: int) -> None:
         """Set one manual channel output percentage."""
 
@@ -102,13 +123,6 @@ class MaxspectCoordinator(DataUpdateCoordinator):
         if not 0 <= value <= 100:
             raise ValueError("channel value must be between 0 and 100")
         self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, {channel: value}, self.port))
-
-    async def async_apply_manual_preset(self, values: list[int]) -> None:
-        """Apply a six-channel manual preset."""
-
-        self.async_set_updated_data(
-            await self.hass.async_add_executor_job(control, self.host, manual_channel_updates(values), self.port)
-        )
 
     async def async_backup_schedule(self) -> dict[str, Any]:
         """Persist the current raw auto/schedule block for this device."""
@@ -262,6 +276,16 @@ def _async_register_services(hass: HomeAssistant) -> None:
             )
         )
 
+    async def async_apply_spectrum_preset(call: ServiceCall) -> None:
+        device = call.data.get("device")
+        coordinators = _matching_coordinators(hass, device)
+        await asyncio.gather(
+            *(
+                coordinator.async_apply_spectrum_preset(call.data["preset"], intensity=call.data["intensity"])
+                for coordinator in coordinators
+            )
+        )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_APPLY_MANUAL_PRESET,
@@ -285,6 +309,12 @@ def _async_register_services(hass: HomeAssistant) -> None:
         SERVICE_APPLY_LUNAR_CONFIG,
         async_apply_lunar_config,
         schema=SERVICE_APPLY_LUNAR_CONFIG_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_APPLY_SPECTRUM_PRESET,
+        async_apply_spectrum_preset,
+        schema=SERVICE_APPLY_SPECTRUM_PRESET_SCHEMA,
     )
 
 

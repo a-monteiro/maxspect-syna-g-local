@@ -24,6 +24,8 @@ from gagent import (  # noqa: E402
     labeled_channels_summary,
     manual_channel_updates,
     lunar_other_update,
+    spectrum_preset_updates,
+    SPECTRUM_PRESETS,
     probe,
     read_frame,
     status_request_payload,
@@ -124,6 +126,27 @@ def test_manual_channel_updates_rejects_invalid_preset_shape_and_values():
             pass
         else:
             raise AssertionError(f"accepted invalid preset {invalid}")
+
+
+def test_spectrum_preset_updates_include_apk_cct_anchors_and_named_spectra():
+    assert SPECTRUM_PRESETS["12k"] == [0, 100, 0, 0, 0, 100]
+    assert SPECTRUM_PRESETS["16k"] == [100, 100, 0, 80, 0, 80]
+    assert SPECTRUM_PRESETS["20k"] == [100, 10, 100, 0, 100, 50]
+    assert SPECTRUM_PRESETS["sky_blue"] == [20, 100, 80, 80, 80, 80]
+    assert SPECTRUM_PRESETS["hawaii_purple"] == SPECTRUM_PRESETS["20k"]
+    assert spectrum_preset_updates("16K") == manual_channel_updates([100, 100, 0, 80, 0, 80])
+    assert spectrum_preset_updates("Hawaii Purple") == manual_channel_updates([100, 10, 100, 0, 100, 50])
+
+
+def test_spectrum_preset_updates_support_intensity_scaling_and_reject_invalid_values():
+    assert spectrum_preset_updates("12k", intensity=50) == manual_channel_updates([0, 50, 0, 0, 0, 50])
+    for args in (("unknown", 100), ("12k", -1), ("12k", 101)):
+        try:
+            spectrum_preset_updates(args[0], intensity=args[1])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"accepted invalid spectrum preset args {args}")
 
 
 def test_infer_lighting_phase_reports_auto_daylight_for_noon_fixture():

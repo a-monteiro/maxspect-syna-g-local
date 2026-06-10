@@ -65,6 +65,57 @@ CHANNEL_LABELS_SHORT = {
     "channel_6": "Red",
 }
 
+# APK-derived R6 spectrum/CCT table from SYNA-G 1.5.3:
+# com.gdut.topview.lemon.maxspect.icv6.ui.SetR6AuxiliaryLightActivity.r6_cct
+# The CCT screen snaps to 8 positions; the visible 12K/16K/20K anchors map to
+# rows 0/4/7 respectively. The app also labels the rows as named spectra.
+SPECTRUM_PRESETS = {
+    "12k": [0, 100, 0, 0, 0, 100],
+    "royal_actinic_420": [0, 100, 0, 0, 0, 100],
+    "sky_blue": [20, 100, 80, 80, 80, 80],
+    "abyss_blue": [50, 100, 0, 20, 100, 80],
+    "aquamarine": [80, 100, 30, 50, 50, 30],
+    "16k": [100, 100, 0, 80, 0, 80],
+    "cyan_actinic": [100, 100, 0, 80, 0, 80],
+    "vanuatu_green": [100, 80, 0, 80, 0, 30],
+    "fiji_pink": [100, 50, 50, 20, 10, 10],
+    "20k": [100, 10, 100, 0, 100, 50],
+    "hawaii_purple": [100, 10, 100, 0, 100, 50],
+}
+SPECTRUM_PRESET_OPTIONS = {
+    "12K": "12k",
+    "16K": "16k",
+    "20K": "20k",
+    "Royal Actinic 420": "royal_actinic_420",
+    "Sky Blue": "sky_blue",
+    "Abyss Blue": "abyss_blue",
+    "Aquamarine": "aquamarine",
+    "Cyan Actinic": "cyan_actinic",
+    "Vanuatu Green": "vanuatu_green",
+    "Fiji Pink": "fiji_pink",
+    "Hawaii Purple": "hawaii_purple",
+}
+
+
+def _normalize_preset_name(preset: str) -> str:
+    key = preset.strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {label.lower().replace(" ", "_").replace("-", "_"): value for label, value in SPECTRUM_PRESET_OPTIONS.items()}
+    return aliases.get(key, key)
+
+
+def spectrum_preset_updates(preset: str, *, intensity: int = 100) -> dict[str, int]:
+    """Return channel updates for an APK-derived R6 spectrum preset."""
+
+    level = int(intensity)
+    if not 0 <= level <= 100:
+        raise ValueError("spectrum preset intensity must be between 0 and 100")
+    key = _normalize_preset_name(preset)
+    values = SPECTRUM_PRESETS.get(key)
+    if values is None:
+        raise ValueError(f"unknown spectrum preset: {preset}")
+    scaled = [round(value * level / 100) for value in values]
+    return manual_channel_updates(scaled)
+
 
 def labeled_channels(decoded_data: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Return APK-derived channel labels paired with decoded brightness values."""
