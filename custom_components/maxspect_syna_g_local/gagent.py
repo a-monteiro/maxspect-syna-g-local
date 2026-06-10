@@ -116,6 +116,46 @@ def schedule_auto_update(auto: bytes) -> dict[str, bytes]:
     return {"auto": value}
 
 
+def _validate_three_percentages(values: list[int] | tuple[int, ...], field: str) -> list[int]:
+    if len(values) != 3:
+        raise ValueError(f"{field} must contain exactly three values")
+    levels = [int(value) for value in values]
+    if any(level < 0 or level > 100 for level in levels):
+        raise ValueError(f"{field} values must be between 0 and 100")
+    return levels
+
+
+def lunar_other_update(
+    other: bytes,
+    *,
+    enabled: bool | None = None,
+    high_channels: list[int] | tuple[int, ...] | None = None,
+    low_channels: list[int] | tuple[int, ...] | None = None,
+    cycle_day: int | None = None,
+) -> dict[str, bytes]:
+    """Return a raw `other` block update with only known lunar fields changed.
+
+    The layout beyond the known APK/live-capture prefix is intentionally
+    preserved byte-for-byte.
+    """
+
+    value = bytearray(other)
+    if len(value) < 26 or value[0] < 25:
+        raise ValueError("other block is too short for lunar fields")
+    if high_channels is not None:
+        value[3:6] = bytes(_validate_three_percentages(high_channels, "high_channels"))
+    if low_channels is not None:
+        value[6:9] = bytes(_validate_three_percentages(low_channels, "low_channels"))
+    if enabled is not None:
+        value[10] = 1 if enabled else 0
+    if cycle_day is not None:
+        day = int(cycle_day)
+        if not 0 <= day <= 255:
+            raise ValueError("cycle_day must be between 0 and 255")
+        value[25] = day
+    return {"other": bytes(value)}
+
+
 class GAgentError(RuntimeError):
     """Protocol or connection error."""
 
@@ -243,7 +283,7 @@ def build_control_payload(_decoded_data: dict[str, Any], updates: dict[str, int 
     updated values in attribute order. It is compact, not a full attr_vals block.
     """
 
-    unsupported = [name for name in updates if name not in {"MODE", *CHANNEL_NAMES, "special_mode", "identification", "auto", "time"}]
+    unsupported = [name for name in updates if name not in {"MODE", *CHANNEL_NAMES, "special_mode", "identification", "auto", "time", "other"}]
     if unsupported:
         raise ValueError(f"unsupported control attributes: {', '.join(unsupported)}")
     ordered = [name for name in ATTRIBUTE_NAMES if name in updates]
@@ -259,6 +299,12 @@ def build_control_payload(_decoded_data: dict[str, Any], updates: dict[str, int 
             value = bytes(updates[name])
             if len(value) != 6:
                 raise ValueError("time must be exactly 6 bytes")
+            values.extend(value)
+            continue
+        if name == "other":
+            value = bytes(updates[name])
+            if len(value) < 26:
+                raise ValueError("other must include the lunar prefix")
             values.extend(value)
             continue
         value = int(updates[name])

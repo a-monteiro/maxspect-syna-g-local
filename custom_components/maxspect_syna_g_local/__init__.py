@@ -17,15 +17,36 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_DEVICES, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN
-from .gagent import CHANNEL_NAMES, control, encode_device_time, manual_channel_updates, probe, schedule_auto_update
+from .gagent import (
+    CHANNEL_NAMES,
+    control,
+    encode_device_time,
+    lunar_other_update,
+    manual_channel_updates,
+    probe,
+    schedule_auto_update,
+)
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["binary_sensor", "button", "light", "number", "sensor"]
+PLATFORMS = ["binary_sensor", "button", "light", "number", "sensor", "switch"]
 SCHEDULE_BACKUPS_STORAGE_KEY = f"{DOMAIN}_schedule_backups"
 SERVICE_APPLY_MANUAL_PRESET = "apply_manual_preset"
 SERVICE_BACKUP_SCHEDULE = "backup_schedule"
 SERVICE_RESTORE_SCHEDULE = "restore_schedule"
+SERVICE_APPLY_LUNAR_CONFIG = "apply_lunar_config"
 DEVICE_OPTIONAL_SCHEMA = vol.Schema({vol.Optional("device"): str})
+THREE_PERCENTAGES_SCHEMA = vol.All(
+    [vol.All(vol.Coerce(int), vol.Range(min=0, max=100))], vol.Length(min=3, max=3)
+)
+SERVICE_APPLY_LUNAR_CONFIG_SCHEMA = vol.Schema(
+    {
+        vol.Optional("device"): str,
+        vol.Optional("enabled"): bool,
+        vol.Optional("high_channels"): THREE_PERCENTAGES_SCHEMA,
+        vol.Optional("low_channels"): THREE_PERCENTAGES_SCHEMA,
+        vol.Optional("cycle_day"): vol.All(vol.Coerce(int), vol.Range(min=0, max=29)),
+    }
+)
 SERVICE_APPLY_MANUAL_PRESET_SCHEMA = vol.Schema(
     {
         vol.Optional("device"): str,
@@ -128,6 +149,32 @@ class MaxspectCoordinator(DataUpdateCoordinator):
             await self.hass.async_add_executor_job(control, self.host, schedule_auto_update(raw_auto), self.port)
         )
 
+    async def async_apply_lunar_config(
+        self,
+        *,
+        enabled: bool | None = None,
+        high_channels: list[int] | tuple[int, ...] | None = None,
+        low_channels: list[int] | tuple[int, ...] | None = None,
+        cycle_day: int | None = None,
+    ) -> None:
+        """Apply known lunar configuration fields while preserving the raw extension block."""
+
+        if self.data is None or not self.data.decoded_data.get("other"):
+            await self.async_request_refresh()
+        if self.data is None:
+            raise ValueError("device status is unavailable")
+        other_hex = (self.data.decoded_data or {}).get("other")
+        if not other_hex:
+            raise ValueError("device status does not contain an extension block")
+        updates = lunar_other_update(
+            bytes.fromhex(other_hex),
+            enabled=enabled,
+            high_channels=high_channels,
+            low_channels=low_channels,
+            cycle_day=cycle_day,
+        )
+        self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, updates, self.port))
+
     async def async_sync_device_time(self) -> None:
         """Sync the controller clock to Home Assistant's local time."""
 
@@ -200,6 +247,21 @@ def _async_register_services(hass: HomeAssistant) -> None:
         coordinators = _matching_coordinators(hass, device)
         await asyncio.gather(*(coordinator.async_restore_schedule() for coordinator in coordinators))
 
+    async def async_apply_lunar_config(call: ServiceCall) -> None:
+        device = call.data.get("device")
+        coordinators = _matching_coordinators(hass, device)
+        await asyncio.gather(
+            *(
+                coordinator.async_apply_lunar_config(
+                    enabled=call.data.get("enabled"),
+                    high_channels=call.data.get("high_channels"),
+                    low_channels=call.data.get("low_channels"),
+                    cycle_day=call.data.get("cycle_day"),
+                )
+                for coordinator in coordinators
+            )
+        )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_APPLY_MANUAL_PRESET,
@@ -217,6 +279,12 @@ def _async_register_services(hass: HomeAssistant) -> None:
         SERVICE_RESTORE_SCHEDULE,
         async_restore_schedule,
         schema=DEVICE_OPTIONAL_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_APPLY_LUNAR_CONFIG,
+        async_apply_lunar_config,
+        schema=SERVICE_APPLY_LUNAR_CONFIG_SCHEMA,
     )
 
 

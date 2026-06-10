@@ -93,3 +93,44 @@ restore_schedule:
       example: aquarium-light-1
       selector:
         text:
+
+apply_lunar_config:
+  name: Apply lunar config
+  description: Apply known lunar/night-cycle fields while preserving the rest of the raw extension block.
+  fields:
+    device:
+      name: Device
+      description: Optional device name or host. If omitted, applies to all configured controllers.
+      required: false
+      example: aquarium-light-1
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      description: Enable or disable the lunar cycle flag.
+      required: false
+      selector:
+        boolean:
+    high_channels:
+      name: Lunar high channels
+      description: Three lunar high intensity percentages from the known extension prefix.
+      required: false
+      example: [100, 100, 100]
+      selector:
+        object:
+    low_channels:
+      name: Lunar low channels
+      description: Three lunar low intensity percentages from the known extension prefix.
+      required: false
+      example: [30, 30, 30]
+      selector:
+        object:
+    cycle_day:
+      name: Cycle day
+      description: Lunar cycle day, 0-29.
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 29
+          step: 1

@@ -23,6 +23,7 @@ from gagent import (  # noqa: E402
     schedule_auto_update,
     labeled_channels_summary,
     manual_channel_updates,
+    lunar_other_update,
     probe,
     read_frame,
     status_request_payload,
@@ -206,3 +207,66 @@ def test_schedule_auto_update_rejects_invalid_shape():
             pass
         else:
             raise AssertionError("accepted invalid auto schedule block")
+
+
+def test_lunar_other_update_preserves_unknown_bytes_and_updates_known_fields():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    original = bytes.fromhex(decoded["other"])
+    updated = lunar_other_update(
+        original,
+        enabled=False,
+        high_channels=[80, 70, 60],
+        low_channels=[5, 4, 3],
+        cycle_day=17,
+    )["other"]
+    assert len(updated) == len(original)
+    assert updated[:3] == original[:3]
+    assert updated[3:6] == bytes([80, 70, 60])
+    assert updated[6:9] == bytes([5, 4, 3])
+    assert updated[10] == 0
+    assert updated[25] == 17
+    assert updated[26:] == original[26:]
+    decoded_other = decode_other_block(updated)
+    assert decoded_other["lunar_enabled"] is False
+    assert decoded_other["lunar_high_channels"] == [80, 70, 60]
+    assert decoded_other["lunar_low_channels"] == [5, 4, 3]
+    assert decoded_other["lunar_cycle_day"] == 17
+
+
+def test_lunar_other_update_allows_partial_updates():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    original = bytes.fromhex(decoded["other"])
+    updated = lunar_other_update(original, enabled=True)["other"]
+    assert updated[10] == 1
+    assert updated[:10] == original[:10]
+    assert updated[11:] == original[11:]
+
+
+def test_lunar_other_update_rejects_invalid_values():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    original = bytes.fromhex(decoded["other"])
+    invalid_cases = [
+        {"high_channels": [1, 2]},
+        {"low_channels": [1, 2, 101]},
+        {"cycle_day": -1},
+        {"cycle_day": 256},
+    ]
+    for kwargs in invalid_cases:
+        try:
+            lunar_other_update(original, **kwargs)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"accepted invalid lunar update {kwargs}")
+
+
+def test_build_control_payload_supports_other_block_updates():
+    frame = read_frame(BytesIO(bytes.fromhex(LIVE_STATUS_FRAME_HEX)))
+    decoded = decode_maxspect_status_payload(frame.payload)
+    original = bytes.fromhex(decoded["other"])
+    payload = build_control_payload(decoded, lunar_other_update(original, enabled=False), serial=7)
+    assert payload[:8].hex() == "0000000711004000"
+    assert payload[8:] == lunar_other_update(original, enabled=False)["other"]
