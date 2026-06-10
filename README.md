@@ -26,6 +26,7 @@ Status: **experimental**. Read/status is well covered; writes are intentionally 
   - turn on resumes the stored automatic/lunar schedule (`MODE=1`)
   - turn off is a safe no-op/refresh; it does **not** zero outputs
   - every write requires an ACK and then refreshes status from the device
+- Exposes labelled manual channel `number` entities, 0-100%, using APK-derived channel names.
 - Exposes explicit action buttons per controller:
   - resume automatic schedule
   - manual all channels off, which writes all six manual channel outputs to zero

@@ -12,10 +12,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_DEVICES, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL_SECONDS, DOMAIN
-from .gagent import control, encode_device_time, probe
+from .gagent import CHANNEL_NAMES, control, encode_device_time, probe
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["binary_sensor", "button", "light", "sensor"]
+PLATFORMS = ["binary_sensor", "button", "light", "number", "sensor"]
 
 
 class MaxspectCoordinator(DataUpdateCoordinator):
@@ -45,6 +45,15 @@ class MaxspectCoordinator(DataUpdateCoordinator):
 
         updates = {f"channel_{idx}": 0 for idx in range(1, 7)}
         self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, updates, self.port))
+
+    async def async_set_channel(self, channel: str, value: int) -> None:
+        """Set one manual channel output percentage."""
+
+        if channel not in CHANNEL_NAMES:
+            raise ValueError(f"unknown channel {channel}")
+        if not 0 <= value <= 100:
+            raise ValueError("channel value must be between 0 and 100")
+        self.async_set_updated_data(await self.hass.async_add_executor_job(control, self.host, {channel: value}, self.port))
 
     async def async_sync_device_time(self) -> None:
         """Sync the controller clock to Home Assistant's local time."""
