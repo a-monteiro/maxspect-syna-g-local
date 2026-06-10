@@ -2,7 +2,7 @@
 
 Local Home Assistant custom integration for Maxspect Syna-G / Jump aquarium lights that speak the local Gizwits/GAgent protocol on TCP `12416`.
 
-Status: **experimental**. Read/status is well covered; light control is intentionally limited to guarded on/off-style actions.
+Status: **experimental**. Read/status is well covered; writes are intentionally limited to guarded, explicit actions.
 
 ## What it does now
 
@@ -24,8 +24,11 @@ Status: **experimental**. Read/status is well covered; light control is intentio
   - password configured flag only; raw password bytes are never exposed
 - Exposes one guarded `light` entity per controller:
   - turn on resumes the stored automatic/lunar schedule (`MODE=1`)
-  - turn off writes all six manual channel outputs to zero
+  - turn off is a safe no-op/refresh; it does **not** zero outputs
   - every write requires an ACK and then refreshes status from the device
+- Exposes explicit action buttons per controller:
+  - resume automatic schedule
+  - manual all channels off, which writes all six manual channel outputs to zero
 - Optional/disabled diagnostic sensors expose raw collected blocks for research:
   - payload preview
   - device time hex

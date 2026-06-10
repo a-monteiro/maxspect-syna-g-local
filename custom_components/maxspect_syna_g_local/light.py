@@ -20,7 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 
 class MaxspectSynaGLight(CoordinatorEntity[MaxspectCoordinator], LightEntity):
-    """Guarded on/off facade for a Maxspect Syna-G light."""
+    """Guarded facade for a Maxspect Syna-G light."""
 
     _attr_supported_color_modes = {ColorMode.ONOFF}
     _attr_color_mode = ColorMode.ONOFF
@@ -62,9 +62,16 @@ class MaxspectSynaGLight(CoordinatorEntity[MaxspectCoordinator], LightEntity):
         await self.coordinator.async_resume_auto()
 
     async def async_turn_off(self, **kwargs) -> None:
-        """Set all six manual channel outputs to zero."""
+        """Avoid destructive output-zeroing from generic HA light off.
 
-        await self.coordinator.async_turn_channels_off()
+        The local protocol does not currently have a verified safe standby/off
+        command. Writing all six channels to zero changes the controller into a
+        manual all-off state and can interrupt the stored automatic/lunar
+        schedule. That action is exposed only as the explicit
+        "manual all channels off" button.
+        """
+
+        await self.coordinator.async_request_refresh()
 
     @property
     def device_info(self):
